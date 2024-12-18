@@ -9,9 +9,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <unistd.h>
-
 #include "pgm.h"
-#include "stlink.h"
 #include "stlinkv2.h"
 #include "stm8.h"
 #include "ihex.h"
@@ -36,23 +34,12 @@ extern int optreset;
 #define VERSION_NOTES ""
 
 programmer_t pgms[] = {
-	{ 	"stlink",
-		STLinkV1,
-		0x0483, // USB vid
-		0x3744, // USB pid
-		stlink_open,
-		stlink_close,
-		stlink_swim_srst,
-		stlink_swim_read_range,
-		stlink_swim_write_range,
-	},
 	{
 		"stlinkv2",
 		STLinkV2,
 		0x0483,
 		0x3748,
 		stlink2_open,
-		stlink_close,
 		stlink2_srst,
 		stlink2_swim_read_range,
 		stlink2_swim_write_range,
@@ -63,7 +50,6 @@ programmer_t pgms[] = {
 		0x0483,
 		0x374b,
 		stlink2_open,
-		stlink_close,
 		stlink2_srst,
 		stlink2_swim_read_range,
 		stlink2_swim_write_range,
@@ -74,7 +60,6 @@ programmer_t pgms[] = {
 		0x0483,
 		0x374f,
 		stlink2_open,
-		stlink_close,
 		stlink2_srst,
 		stlink2_swim_read_range,
 		stlink2_swim_write_range,
@@ -339,6 +324,24 @@ const stm8_device_t *get_part(const char *name)
 	return(0);
 }
 
+// Define the function to add a suffix to the filename
+char *add_suffix_to_filename(const char *filename, const char *suffix) {
+    static char new_filename[256]; // Adjust size as needed for your filename length
+    char *dot = strrchr(filename, '.'); // Find the last dot for the extension
+
+    if (dot) {
+        // Copy up to the dot
+        snprintf(new_filename, dot - filename + 1, "%s", filename);
+        strcat(new_filename, suffix);
+        strcat(new_filename, dot);
+    } else {
+        // No extension found, just add suffix at the end
+        snprintf(new_filename, sizeof(new_filename), "%s%s", filename, suffix);
+    }
+
+    return new_filename;
+}
+
 int main(int argc, char **argv) {
 	unsigned int start;
 	int bytes_count = 0;
@@ -363,7 +366,7 @@ int main(int argc, char **argv) {
 
 	setbuf (stderr, 0); // Make stderr unbuffered (which is the default on POSIX anyway, but not on Windows).
 
-	while((c = getopt(argc, argv, "r:w:v:nc:S:p:d:s:b:hluVLR")) != (char)-1) {
+	while((c = getopt(argc, argv, "r:w:v:nc:S:p:d:s:b:hluVLRt")) != (char)-1) {
 		switch(c) {
 			case 'c':
 				pgm_specified = true;
@@ -389,6 +392,10 @@ int main(int argc, char **argv) {
 					printf("%s ", stm8_devices[i].name);
 				printf("\n");
 				exit(0);
+			case 't':				//NDB Toegevoegd
+				action = TEST;
+				strcpy(filename, optarg);
+				break;
 			case 'r':
 				action = READ;
 				strcpy(filename, optarg);

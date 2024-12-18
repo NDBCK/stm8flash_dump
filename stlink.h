@@ -46,7 +46,7 @@ typedef struct _scsi_usb_csw {
 	unsigned char status;
 } scsi_usb_csw;
 
-bool stlink_open(programmer_t *pgm);
+int stlink_open(programmer_t *pgm);
 void stlink_close(programmer_t *pgm);
 void stlink_swim_srst(programmer_t *pgm);
 int stlink_swim_read_range(programmer_t *pgm, const stm8_device_t *device, unsigned char *buffer, unsigned int start, unsigned int length);

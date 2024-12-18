@@ -23,15 +23,15 @@ typedef enum {
     WRITE,
     VERIFY,
     RESET,
-    UNLOCK
+    UNLOCK,
+	TEST
 } action_t;
 
 typedef enum {
 	STLinkV1,
 	STLinkV2,
 	STLinkV21,
-	STLinkV3,
-	ESP_STLink
+	STLinkV3
 } programmer_type_t;
 
 typedef struct programmer_s {
@@ -42,8 +42,7 @@ typedef struct programmer_s {
 	unsigned int usb_pid;
 
 	/* Methods */
-	bool (*open) (struct programmer_s *pgm);
-	void (*close) (struct programmer_s *pgm);
+	int (*open) (struct programmer_s *pgm);
 	void (*reset) (struct programmer_s *pgm);
 	int (*read_range) (struct programmer_s *pgm, const stm8_device_t *device, unsigned char *buffer, unsigned int start, unsigned int length);
 	int (*write_range) (struct programmer_s *pgm, const stm8_device_t *device, unsigned char *buffer, unsigned int start, unsigned int length, const memtype_t memtype);

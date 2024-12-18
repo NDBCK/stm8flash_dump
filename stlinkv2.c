@@ -318,8 +318,9 @@ static void stlink2_high_speed(programmer_t *pgm) {
 }
 #endif
 
-bool stlink2_open(programmer_t *pgm) {
+int stlink2_open(programmer_t *pgm) {
 	unsigned char buf[8];
+	int ROP;
 	unsigned int v;
 
 	stlink2_cmd(pgm, 1, STLINK_GET_VERSION);
@@ -375,16 +376,16 @@ bool stlink2_open(programmer_t *pgm) {
 
 	// Mask internal interrupt sources, enable access to whole of memory,
 	// prioritize SWIM and stall the CPU.
-	swim_write_byte(pgm, 0xa1, 0x7f80);
-
+	swim_write_byte(pgm, 0xa1, 0x7f80);	//0x7f80 = SWIM status register
 	swim_cmd(pgm, 2, STLINK_SWIM, SWIM_DEASSERT_RESET);
-	usleep(1000);
+	ROP = swim_read_byte(pgm, 0x4800);
+	//usleep(1000);
 
 #if USE_HIGH_SPEED
 	stlink2_high_speed(pgm);
 #endif
 
-	return(true);
+	return(ROP);
 }
 
 void stlink2_srst(programmer_t *pgm) {
