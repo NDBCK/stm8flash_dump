@@ -23,9 +23,9 @@ Why?
 ----
 
 Voltage glitching with the original STM8flash is more difficult.
-	*There is an extra reset genreated in the original program because of the high speed modus
-	*For every memory region you want to read in the original program, you need to restart
-	*Checking if the voltage glitch is succesfull is not straightforward
+- An extra reset is generated in the original program due to the high-speed mode.
+- For every memory region you want to read in the original program, you need to restart.
+- Checking if the voltage glitch is successful is not straightforward.
 
 Reasoning
 ---------
@@ -33,10 +33,12 @@ Reasoning
 When trying to read the option bytes (memory address 0x4800), the response is 0x71 when the STM8 is protected.
 If the ROP (Read Out Protection) is glitched, the real option bytes are returned. If so, the software dumps all memory regions to seperate files
 
-```
 Example:
+```
 stm8flash.exe -c stlinkv2 -p stm8s003f3 -t dump.hex
+```
 If the protection is glitched or not in place following files are dumped:
+```
 dump_OPT.hex		Option bytes
 dump_PROM.hex		Eeprom data
 dump_RAM.hex		Current RAM data
