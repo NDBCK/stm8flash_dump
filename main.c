@@ -33,6 +33,8 @@ extern int optreset;
 #define VERSION "1.2"
 #define VERSION_NOTES ""
 
+#define STM8FLASH_LIBUSB_QUIET
+
 programmer_t pgms[] = {
 	{
 		"stlinkv2",
@@ -98,6 +100,7 @@ void print_help_and_exit(const char *name, bool err) {
 	fprintf(stream, "\t-r <filename>  Read data from device to file\n");
 	fprintf(stream, "\t-w <filename>  Write data from file to device\n");
 	fprintf(stream, "\t-v <filename>  Verify data in device against file\n");
+	fprintf(stream, "\t-t <filename>  Check if STM8 device is protected, if not dump all memory regions\n");
 	fprintf(stream, "\t-R             Reset the device only\n");
 	fprintf(stream, "\t-V             Print Date(YearMonthDay-Version) and Version format is IE: 20171204-1.0\n");
 	fprintf(stream, "\t-u             Unlock. Reset option bytes to factory default to remove write protection.\n");
@@ -345,6 +348,7 @@ char *add_suffix_to_filename(const char *filename, const char *suffix) {
 int main(int argc, char **argv) {
 	unsigned int start;
 	int bytes_count = 0;
+	int ROP;
 	char filename[256];
 	memset(filename, 0, sizeof(filename));
 	bool need_file = true;
@@ -366,7 +370,7 @@ int main(int argc, char **argv) {
 
 	setbuf (stderr, 0); // Make stderr unbuffered (which is the default on POSIX anyway, but not on Windows).
 
-	while((c = getopt(argc, argv, "r:w:v:nc:S:p:d:s:b:hluVLRt")) != (char)-1) {
+	while((c = getopt(argc, argv, "t:r:w:v:nc:S:p:d:s:b:hluVLR")) != (char)-1) {
 		switch(c) {
 			case 'c':
 				pgm_specified = true;
@@ -485,70 +489,226 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	switch (memtype) {
-	case RAM:
-		if(!start_addr_specified) {
-			start = part->ram_start;
-			start_addr_specified = true;
-		}
-		if(!bytes_count_specified || bytes_count > part->ram_size) {
-			bytes_count = part->ram_size;
-		}
-		fprintf(stderr, "Determine RAM area\r\n");
-		break;
-	case EEPROM:
-		if(!start_addr_specified) {
-			start = part->eeprom_start;
-			start_addr_specified = true;
-		}
-		if(!bytes_count_specified || bytes_count > part->eeprom_size) {
-			bytes_count = part->eeprom_size;
-		}
-		fprintf(stderr, "Determine EEPROM area\r\n");
-		break;
-	case FLASH:
-		if(!start_addr_specified) {
-			start = part->flash_start;
-			start_addr_specified = true;
-		}
-		if(!bytes_count_specified || bytes_count > part->flash_size) {
-			bytes_count = part->flash_size;
-		}
-		fprintf(stderr, "Determine FLASH area\r\n");
-		break;
-	case OPT:
-		if(!start_addr_specified) {
-			start = 0x4800;
-			start_addr_specified = true;
-		}
-		size_t opt_size = (part->flash_size <= 8*1024 ? 0x40 : 0x80);
-		if(!bytes_count_specified || bytes_count > opt_size) {
-			bytes_count = opt_size;
-		}
-		fprintf(stderr, "Determine OPT area\r\n");
-		break;
-	case UNKNOWN:
-		;
-	}
-
 	if(!action)
 		spawn_error("No action has been specified");
-	if(!start_addr_specified)
-		spawn_error("No memtype or start_addr has been specified");
+
+	if(action != TEST){
+		switch (memtype) {
+		case RAM:
+			if(!start_addr_specified) {
+				start = part->ram_start;
+				start_addr_specified = true;
+			}
+			if(!bytes_count_specified || bytes_count > part->ram_size) {
+				bytes_count = part->ram_size;
+			}
+			fprintf(stderr, "Determine RAM area\r\n");
+			break;
+		case EEPROM:
+			if(!start_addr_specified) {
+				start = part->eeprom_start;
+				start_addr_specified = true;
+			}
+			if(!bytes_count_specified || bytes_count > part->eeprom_size) {
+				bytes_count = part->eeprom_size;
+			}
+			fprintf(stderr, "Determine EEPROM area\r\n");
+			break;
+		case FLASH:
+			if(!start_addr_specified) {
+				start = part->flash_start;
+				start_addr_specified = true;
+			}
+			if(!bytes_count_specified || bytes_count > part->flash_size) {
+				bytes_count = part->flash_size;
+			}
+			fprintf(stderr, "Determine FLASH area\r\n");
+			break;
+		case OPT:
+			if(!start_addr_specified) {
+				start = 0x4800;
+				start_addr_specified = true;
+			}
+			size_t opt_size = (part->flash_size <= 8*1024 ? 0x40 : 0x80);
+			if(!bytes_count_specified || bytes_count > opt_size) {
+				bytes_count = opt_size;
+			}
+			fprintf(stderr, "Determine OPT area\r\n");
+			break;
+		case UNKNOWN:
+			;
+		}
+		if(!start_addr_specified){
+			spawn_error("No memtype or start_addr has been specified");
+			print_help_and_exit(argv[0], true);
+		}
+	}
+
 	if (need_file && !strlen(filename))
 		spawn_error("No filename has been specified");
-	if(!action || !start_addr_specified || (need_file && !strlen(filename)))
+	if(!action || (need_file && !strlen(filename)))
 		print_help_and_exit(argv[0], true);
 	if(!usb_init(pgm, pgm_serialno_specified, pgm_serialno))
 		spawn_error("Couldn't initialize stlink");
-	if(!pgm->open(pgm))
-		spawn_error("Error communicating with MCU. Please check your SWIM connection.");
+	ROP = pgm->open(pgm);
 
 	if(is_ext(filename, ".ihx") || is_ext(filename, ".hex") || is_ext(filename, ".i86"))
 		fileformat = INTEL_HEX;
 	else if(is_ext(filename, ".s19") || is_ext(filename, ".s8") || is_ext(filename, ".srec"))
 		fileformat = MOTOROLA_S_RECORD;
 	fprintf(stderr, "Due to its file extension (or lack thereof), \"%s\" is considered as %s format!\n", filename, fileformat == INTEL_HEX ? "INTEL HEX" : (fileformat == MOTOROLA_S_RECORD ? "MOTOROLA S-RECORD" : "RAW BINARY"));
+
+
+	if(action == TEST) {
+		fprintf(stdout, "ROP: 0x%02x\n", ROP);
+		if(ROP != 0x71){	//Check if ROP protection is inactive
+			fprintf(stdout, "Protection inactive - dump all\n");
+		
+			int bytes_count_align;
+			int recv;
+				
+			//FLASH
+			start = part->flash_start;
+			start_addr_specified = true;
+			bytes_count = part->flash_size;
+			FILE *fa;
+			fprintf(stderr, "Reading %d bytes at 0x%x... ", bytes_count, start);
+			bytes_count_align = ((bytes_count-1)/256+1)*256; // Reading should be done in blocks of 256 bytes
+			unsigned char *bufa = malloc(bytes_count_align);
+			if(!bufa) spawn_error("malloc failed");
+			recv = pgm->read_range(pgm, part, bufa, start, bytes_count_align);
+			if(recv < bytes_count_align) {
+				fprintf(stderr, "\r\nRequested %d bytes but received only %d.\r\n", bytes_count_align, recv);
+				spawn_error("Failed to read MCU");
+			}
+			const char *suffixa = "_ROM";
+			const char *rom_filename = add_suffix_to_filename(filename, suffixa);
+			
+			if(!(fa = fopen(rom_filename, (fileformat == RAW_BINARY) ? "wb" : "w")))
+				spawn_error("Failed to open file");
+			switch(fileformat)
+			{
+			case INTEL_HEX:
+				if(ihex_write(fa, bufa, start, start+bytes_count) < 0)
+				  exit(-1);
+				break;
+			case MOTOROLA_S_RECORD:
+				srec_write(fa, bufa, start, start+bytes_count);
+				break;
+			default:
+				fwrite(bufa, 1, bytes_count, fa);
+			}
+			fclose(fa);
+			fprintf(stdout, "Flash OK\n");
+
+			//EEPROM
+			start = part->eeprom_start;
+			start_addr_specified = true;
+			bytes_count = part->eeprom_size;
+			FILE *fb;
+			fprintf(stderr, "Reading %d bytes at 0x%x... ", bytes_count, start);
+			bytes_count_align = ((bytes_count-1)/256+1)*256; // Reading should be done in blocks of 256 bytes
+			unsigned char *bufb = malloc(bytes_count_align);
+			if(!bufb) spawn_error("malloc failed");
+			recv = pgm->read_range(pgm, part, bufb, start, bytes_count_align);
+			if(recv < bytes_count_align) {
+				fprintf(stderr, "\r\nRequested %d bytes but received only %d.\r\n", bytes_count_align, recv);
+				spawn_error("Failed to read MCU");
+			}
+			const char *suffixb = "_PROM";
+			const char *prom_filename = add_suffix_to_filename(filename, suffixb);
+			
+			if(!(fb = fopen(prom_filename, (fileformat == RAW_BINARY) ? "wb" : "w")))
+				spawn_error("Failed to open file");
+			switch(fileformat)
+			{
+			case INTEL_HEX:
+				if(ihex_write(fb, bufb, start, start+bytes_count) < 0)
+				  exit(-1);
+				break;
+			case MOTOROLA_S_RECORD:
+				srec_write(fb, bufb, start, start+bytes_count);
+				break;
+			default:
+				fwrite(bufb, 1, bytes_count, fb);
+			}
+			fclose(fb);
+			fprintf(stdout, "EEPROM OK\n");
+			
+			//OPT
+			start = 0x4800;
+			start_addr_specified = true;
+			size_t opt_size = (part->flash_size <= 8*1024 ? 0x40 : 0x80);
+			bytes_count = opt_size;
+
+			FILE *fc;
+			fprintf(stderr, "Reading %d bytes at 0x%x... ", bytes_count, start);
+			bytes_count_align = ((bytes_count-1)/256+1)*256; // Reading should be done in blocks of 256 bytes
+			unsigned char *bufc = malloc(bytes_count_align);
+			if(!bufc) spawn_error("malloc failed");
+			recv = pgm->read_range(pgm, part, bufc, start, bytes_count_align);
+			if(recv < bytes_count_align) {
+				fprintf(stderr, "\r\nRequested %d bytes but received only %d.\r\n", bytes_count_align, recv);
+				spawn_error("Failed to read MCU");
+			}
+			const char *suffixc = "_OPT";
+			const char *opt_filename = add_suffix_to_filename(filename, suffixc);
+			
+			if(!(fc = fopen(opt_filename, (fileformat == RAW_BINARY) ? "wb" : "w")))
+				spawn_error("Failed to open file");
+			switch(fileformat)
+			{
+			case INTEL_HEX:
+				if(ihex_write(fc, bufc, start, start+bytes_count) < 0)
+				  exit(-1);
+				break;
+			case MOTOROLA_S_RECORD:
+				srec_write(fc, bufc, start, start+bytes_count);
+				break;
+			default:
+				fwrite(bufc, 1, bytes_count, fc);
+			}
+			fclose(fc);
+			fprintf(stdout, "OPT OK\n");
+			
+			//RAM
+			start = part->ram_start;
+			start_addr_specified = true;
+			bytes_count = part->ram_size;
+
+			FILE *fd;
+			fprintf(stderr, "Reading %d bytes at 0x%x... ", bytes_count, start);
+			bytes_count_align = ((bytes_count-1)/256+1)*256; // Reading should be done in blocks of 256 bytes
+			unsigned char *bufd = malloc(bytes_count_align);
+			if(!bufd) spawn_error("malloc failed");
+			recv = pgm->read_range(pgm, part, bufd, start, bytes_count_align);
+			if(recv < bytes_count_align) {
+				fprintf(stderr, "\r\nRequested %d bytes but received only %d.\r\n", bytes_count_align, recv);
+				spawn_error("Failed to read MCU");
+			}
+			const char *suffixd = "_RAM";
+			const char *ram_filename = add_suffix_to_filename(filename, suffixd);
+			
+			if(!(fd = fopen(ram_filename, (fileformat == RAW_BINARY) ? "wb" : "w")))
+				spawn_error("Failed to open file");
+			switch(fileformat)
+			{
+			case INTEL_HEX:
+				if(ihex_write(fd, bufd, start, start+bytes_count) < 0)
+				  exit(-1);
+				break;
+			case MOTOROLA_S_RECORD:
+				srec_write(fd, bufd, start, start+bytes_count);
+				break;
+			default:
+				fwrite(bufd, 1, bytes_count, fd);
+			}
+			fclose(fd);
+			fprintf(stdout, "RAM OK\n");
+			fprintf(stdout, "Dump Done\n");
+		}
+	}
+
 
 	FILE *f;
 	if(action == READ) {

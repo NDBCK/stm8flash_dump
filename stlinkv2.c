@@ -20,7 +20,7 @@
  * changes the clock rate nor changes the smallest interval between edges there
  * seems little reason not to always use it.
  */
-#define USE_HIGH_SPEED          1
+#define USE_HIGH_SPEED          0
 
 /* Only write differences to the target.
  * If set to 1 then a write operation first reads the relevant memory from the
