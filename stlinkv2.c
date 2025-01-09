@@ -379,7 +379,16 @@ int stlink2_open(programmer_t *pgm) {
 	swim_write_byte(pgm, 0xa1, 0x7f80);	//0x7f80 = SWIM status register
 	swim_cmd(pgm, 2, STLINK_SWIM, SWIM_DEASSERT_RESET);
 	ROP = swim_read_byte(pgm, 0x4800);
-	//usleep(1000);
+	    
+	// Check all bytes from 0x4801 to 0x4880
+    for (unsigned int addr = 0x4801; addr <= 0x483F; addr++) {
+        int byte = swim_read_byte(pgm, addr);
+        if (byte != ROP) {
+            return 0; // Return false if any byte does not match (ROP Inactive)
+        }
+    }
+
+    return 1; // Return true if all bytes match (ROP Active)
 
 #if USE_HIGH_SPEED
 	stlink2_high_speed(pgm);

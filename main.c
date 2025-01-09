@@ -560,8 +560,8 @@ int main(int argc, char **argv) {
 
 
 	if(action == TEST) {
-		fprintf(stdout, "ROP: 0x%02x\n", ROP);
-		if(ROP != 0x71){	//Check if ROP protection is inactive
+		fprintf(stdout, "ROP: %s\n", ROP ? "active" : "inactive");
+		if(!ROP){	//Check if ROP protection is inactive
 			fprintf(stdout, "Protection inactive - dump all\n");
 		
 			int bytes_count_align;
