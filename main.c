@@ -100,7 +100,7 @@ void print_help_and_exit(const char *name, bool err) {
 	fprintf(stream, "\t-r <filename>  Read data from device to file\n");
 	fprintf(stream, "\t-w <filename>  Write data from file to device\n");
 	fprintf(stream, "\t-v <filename>  Verify data in device against file\n");
-	fprintf(stream, "\t-t <filename>  Check if STM8 device is protected, if not dump all memory regions\n");
+	fprintf(stream, "\t-t <filename>  Check if STM8 device is ROP protected, if ROP protection is in place but glitched (deactivated), dump all memory regions\n");
 	fprintf(stream, "\t-R             Reset the device only\n");
 	fprintf(stream, "\t-V             Print Date(YearMonthDay-Version) and Version format is IE: 20171204-1.0\n");
 	fprintf(stream, "\t-u             Unlock. Reset option bytes to factory default to remove write protection.\n");
@@ -560,9 +560,17 @@ int main(int argc, char **argv) {
 
 
 	if(action == TEST) {
-		fprintf(stdout, "ROP: %s\n", ROP ? "active" : "inactive");
-		if(!ROP){	//Check if ROP protection is inactive
-			fprintf(stdout, "Protection inactive - dump all\n");
+		fprintf(stdout, "ROP: 0x%02X\n", ROP);
+		if(ROP != 0xAA){	//Check if ROP protection is in place but deactivated by glitching
+			if(ROP == 0x71){ //Certain that ROP is in place and activated
+				fprintf(stdout, "Read Out Protection in place and active - dumping impossible\n");
+			}
+			else{	//ROP could be in place and active or no protection is in place.
+				fprintf(stdout, "No Read Out Protection in place or Read Out Protection is activated - dumping disabled\n");
+			}
+		}
+		else{
+			fprintf(stdout, "Read Out Protection in place but inactive - dump all memory regions\n");
 		
 			int bytes_count_align;
 			int recv;
