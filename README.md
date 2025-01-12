@@ -30,8 +30,8 @@ Voltage glitching with the original STM8flash is more difficult.
 Reasoning
 ---------
 
-When trying to read the option bytes (memory address 0x4800), the response is 0x71 when the STM8 is protected.
-If the ROP (Read Out Protection) is glitched, the real option bytes are returned. If so, the software dumps all memory regions to seperate files
+When trying to read the option bytes (memory address 0x4800), the response is 0x71 or 0x00 when the STM8 is protected.
+If the ROP (Read Out Protection) is glitched, the real option bytes are returned. So if there is a protection in place and it is glitched, 0xAA is read. If so, the software dumps all memory regions to seperate files
 
 Example:
 ```
